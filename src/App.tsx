@@ -9,6 +9,9 @@ import { categories, type Category, type Question, type Quiz } from './types';
 import { toChoseong } from './utils/hangul';
 import { isCorrectAnswer } from './utils/answer';
 
+const createQuestionId = () => globalThis.crypto?.randomUUID?.() ?? `question-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+const crypto = { randomUUID: createQuestionId };
+
 function App() {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]); const [user, setUser] = useState<User|null>(null); const [notice, setNotice] = useState('');
   const reload = () => listQuizzes().then(setQuizzes).catch(() => setNotice('퀴즈를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
