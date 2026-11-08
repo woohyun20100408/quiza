@@ -1,0 +1,17 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomId": {
+        ".read": "auth != null && data.child('players').child(auth.uid).exists()",
+        ".write": "!data.exists() && auth != null && newData.child('info/hostUid').val() === auth.uid && newData.child('players').child(auth.uid).exists()",
+        "players": { "$uid": { ".write": "auth != null && auth.uid === $uid" } },
+        "drawing": { ".write": "auth != null && data.parent().child('state/drawerUid').val() === auth.uid" },
+        "guesses": { "$guessId": { ".write": "auth != null && newData.child('uid').val() === auth.uid && data.parent().parent().child('state/drawerUid').val() !== auth.uid" } },
+        "info": { ".write": "auth != null && data.parent().child('info/hostUid').val() === auth.uid" },
+        "state": { ".write": "auth != null && data.parent().child('info/hostUid').val() === auth.uid" },
+        "scoreboard": { ".write": "auth != null && data.parent().child('info/hostUid').val() === auth.uid" }
+      }
+    },
+    "presence": { "$uid": { ".read": "auth != null", ".write": "auth != null && auth.uid === $uid" } }
+  }
+}
