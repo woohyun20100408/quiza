@@ -1,25 +1,133 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function owner(uid) { return signedIn() && request.auth.uid == uid; }
-    function quizOwner() { return signedIn() && resource.data.ownerUid == request.auth.uid; }
-    match /users/{uid} {
-      allow read, write: if owner(uid);
-      match /favorites/{quizId} { allow read, write: if owner(uid); }
-      match /playHistory/{historyId} { allow read, write: if owner(uid); }
+    function signedIn() {
+      return request.auth != null;
     }
-    match /quizSets/{quizId} {
-      allow read: if resource.data.visibility == 'public' || quizOwner();
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if quizOwner() && request.resource.data.ownerUid == resource.data.ownerUid;
-      allow delete: if quizOwner();
-      match /questions/{questionId} {
-        function parent() { return get(/databases/$(database)/documents/quizSets/$(quizId)); }
-        allow read: if parent().data.visibility == 'public' || (signedIn() && parent().data.ownerUid == request.auth.uid);
-        allow create, update, delete: if signedIn() && parent().data.ownerUid == request.auth.uid;
+
+    function ownsQuiz(quizId) {
+      return signedIn()
+        && get(/databases/$(database)/documents/quizSets/$(quizId)).data.ownerUid == request.auth.uid;
+    }
+
+    function validQuizCreate() {
+      return request.resource.data.keys().hasAll([
+          'title', 'titleLower', 'description', 'category', 'difficulty',
+          'visibility', 'ownerUid', 'ownerName', 'questionCount',
+          'playCount', 'likeCount', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'title', 'titleLower', 'description', 'category', 'difficulty',
+          'visibility', 'ownerUid', 'ownerName', 'questionCount',
+          'playCount', 'likeCount', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 50
+        && request.resource.data.titleLower is string
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 240
+        && request.resource.data.category in [
+          '일반상식', '동물', '음식', '게임', '연예·문화',
+          '과학', '스포츠', '역사', 'IT·기술', '기타'
+        ]
+        && request.resource.data.difficulty in ['쉬움', '보통', '어려움']
+        && request.resource.data.visibility in ['public', 'private', 'draft']
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerName is string
+        && request.resource.data.questionCount is int
+        && request.resource.data.questionCount >= 0
+        && request.resource.data.questionCount <= 100
+        && request.resource.data.playCount == 0
+        && request.resource.data.likeCount == 0
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    function validQuestion(questionId) {
+      return request.resource.data.keys().hasAll([
+          'id', 'answer', 'initials', 'hint', 'explanation', 'order'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'id', 'answer', 'initials', 'hint', 'explanation', 'order'
+        ])
+        && request.resource.data.id == questionId
+        && request.resource.data.answer is string
+        && request.resource.data.answer.size() > 0
+        && request.resource.data.answer.size() <= 100
+        && request.resource.data.initials is string
+        && request.resource.data.initials.size() <= 100
+        && request.resource.data.hint is string
+        && request.resource.data.hint.size() <= 240
+        && request.resource.data.explanation is string
+        && request.resource.data.explanation.size() <= 1000
+        && request.resource.data.order is int
+        && request.resource.data.order >= 0
+        && request.resource.data.order < 100;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['nickname', 'photoURL', 'createdAt', 'updatedAt'])
+        && request.resource.data.nickname is string
+        && request.resource.data.nickname.size() <= 30
+        && request.resource.data.photoURL is string;
+      allow delete: if signedIn() && request.auth.uid == uid;
+
+      match /favorites/{quizId} {
+        allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
       }
-      match /likes/{uid} { allow read: if true; allow create, delete: if owner(uid); allow update: if false; }
+
+      match /playHistory/{historyId} {
+        allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    match /quizSets/{quizId} {
+      allow read: if resource.data.visibility == 'public'
+        || (signedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if signedIn() && validQuizCreate();
+      allow update: if signedIn()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'title', 'titleLower', 'description', 'category', 'difficulty',
+          'visibility', 'questionCount', 'updatedAt'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 50
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 240
+        && request.resource.data.category in [
+          '일반상식', '동물', '음식', '게임', '연예·문화',
+          '과학', '스포츠', '역사', 'IT·기술', '기타'
+        ]
+        && request.resource.data.difficulty in ['쉬움', '보통', '어려움']
+        && request.resource.data.visibility in ['public', 'private', 'draft']
+        && request.resource.data.questionCount is int
+        && request.resource.data.questionCount >= 0
+        && request.resource.data.questionCount <= 100
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+
+      match /questions/{questionId} {
+        allow read: if (signedIn() && ownsQuiz(quizId))
+          || get(/databases/$(database)/documents/quizSets/$(quizId)).data.visibility == 'public';
+        allow create, update: if signedIn() && ownsQuiz(quizId) && validQuestion(questionId);
+        allow delete: if signedIn() && ownsQuiz(quizId);
+      }
+
+      match /likes/{uid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && get(/databases/$(database)/documents/quizSets/$(quizId)).data.visibility == 'public';
+        allow update: if false;
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
     }
   }
 }
