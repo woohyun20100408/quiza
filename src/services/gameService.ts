@@ -4,7 +4,7 @@ import { rtdb } from './firebase';
 
 export type Player = { uid: string; name: string; photoURL?: string | null; score: number; ready: boolean; online: boolean };
 export type Room = { info: { name: string; hostUid: string; maxPlayers: number; rounds: number; duration: number; isPrivate: boolean; topic?: string; status: 'lobby'|'playing'|'finished'; code: string }; players: Record<string, Player>; state?: { drawerUid: string; round: number; endsAt: number }; drawing?: { revision: number; strokes?: Record<string, Stroke> }; guesses?: Record<string, Guess>; scoreboard?: Record<string, number> };
-export type Stroke = { points: Array<[number, number]>; color: string; width: number; mode?: 'draw'|'erase' };
+export type Stroke = { points: Array<[number, number]>; color: string; width: number; mode?: 'draw'|'erase'; uid?: string; seq?: number; done?: boolean };
 export type Guess = { uid: string; name: string; text: string; at: number; correct?: boolean };
 const id = () => crypto.randomUUID?.() ?? `${Date.now()}${Math.random().toString(36).slice(2)}`;
 export const roomPath = (roomId: string) => `rooms/${roomId}`;
@@ -31,7 +31,7 @@ export async function joinRoom(roomId: string, user: User, nickname: string) {
 export const watchRoom = (roomId: string, handler: (room: Room | null) => void) => rtdb ? onValue(ref(rtdb, roomPath(roomId)), s => handler(s.val())) : () => {};
 export const watchRooms = (handler: (rooms: Record<string, Room>) => void) => rtdb ? onValue(ref(rtdb, 'rooms'), s => handler(s.val() || {})) : () => {};
 export async function setReady(roomId: string, uid: string, ready: boolean) { if (rtdb) await update(ref(rtdb, `${roomPath(roomId)}/players/${uid}`), { ready }); }
-export async function submitStroke(roomId: string, uid: string, stroke: Stroke) { if (rtdb) await set(ref(rtdb, `${roomPath(roomId)}/drawing/strokes/${id()}`), { ...stroke, uid }); }
+export async function submitStroke(roomId: string, uid: string, stroke: Stroke) { if (rtdb) await set(ref(rtdb, `${roomPath(roomId)}/drawing/strokes/${uid}/${stroke.seq ?? id()}`), { ...stroke, uid }); }
 export async function clearDrawing(roomId: string) { if (rtdb) await set(ref(rtdb, `${roomPath(roomId)}/drawing`), { revision: Date.now() }); }
 export async function sendGuess(roomId: string, user: User, text: string) { if (rtdb && text.trim()) await push(ref(rtdb, `${roomPath(roomId)}/guesses`), { uid: user.uid, name: user.displayName || '플레이어', text: text.trim().slice(0, 80), at: Date.now() }); }
 export async function leaveRoom(roomId: string, uid: string) { if (rtdb) await remove(ref(rtdb, `${roomPath(roomId)}/players/${uid}`)); }
