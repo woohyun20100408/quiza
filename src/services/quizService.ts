@@ -8,11 +8,14 @@ function readLocal(): Quiz[] { try { return JSON.parse(localStorage.getItem(loca
 function writeLocal(quizzes: Quiz[]) { localStorage.setItem(localKey, JSON.stringify(quizzes)); }
 export async function listQuizzes(): Promise<Quiz[]> {
   if (!db) return readLocal().filter((quiz) => quiz.visibility === 'public');
-  const snapshot = await getDocs(query(collection(db, 'quizSets'), where('visibility', '==', 'public'), orderBy('createdAt', 'desc'), limit(100)));
-  return Promise.all(snapshot.docs.map(async (item) => {
+  const snapshot = await getDocs(query(collection(db, 'quizSets'), where('visibility', '==', 'public'), limit(100)));
+  const quizzes = await Promise.all(snapshot.docs.map(async (item) => {
     const questions = await getDocs(query(collection(db!, 'quizSets', item.id, 'questions'), orderBy('order')));
-    return { ...item.data(), id: item.id, questions: questions.docs.map((question) => ({ ...question.data(), id: question.id })) } as Quiz;
+    const data = item.data();
+    const createdAt = typeof data.createdAt?.toMillis === 'function' ? data.createdAt.toMillis() : Number(data.createdAt) || 0;
+    return { ...data, createdAt, id: item.id, questions: questions.docs.map((question) => ({ ...question.data(), id: question.id })) } as Quiz;
   }));
+  return quizzes.sort((a, b) => b.createdAt - a.createdAt);
 }
 export async function saveQuiz(input: Omit<Quiz, 'id'|'createdAt'|'questionCount'>, user: User | null): Promise<void> {
   const questions = input.questions.map((q) => ({ ...q, initials: toChoseong(q.answer) }));
